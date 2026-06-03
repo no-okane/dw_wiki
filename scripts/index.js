@@ -115,53 +115,133 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
 
-    // =========================================
-    // 5. 각주(주석) 호버 및 모바일 모달 팝업 기능
+// =========================================
+    // 5. 각주(주석) 이동, 호버 및 팝업 기능
     // =========================================
     const footnoteLinks = document.querySelectorAll('.footnote-link');
     const modalOverlay = document.getElementById('footnote-modal');
     const modalText = document.getElementById('footnote-modal-text');
     const modalCloseBtn = document.getElementById('footnote-modal-close');
 
+    // PC 툴팁 생성
+    let pcTooltip = document.getElementById('pc-tooltip');
+    if (!pcTooltip) {
+        pcTooltip = document.createElement('div');
+        pcTooltip.id = 'pc-tooltip';
+        pcTooltip.className = 'pc-tooltip';
+        document.body.appendChild(pcTooltip);
+    }
+
     footnoteLinks.forEach(link => {
+        // [PC] 마우스 호버 시 툴팁 표시
+        link.addEventListener('mouseenter', function() {
+            if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+                const fnId = this.getAttribute('data-id');
+                const fnText = this.getAttribute('data-footnote');
+                
+                pcTooltip.innerHTML = `<span style="color:#0275d8">[${fnId}]</span> ${fnText}`;
+                pcTooltip.classList.add('active');
+
+                const linkRect = this.getBoundingClientRect();
+                const tooltipRect = pcTooltip.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+
+                let topPos = linkRect.top - tooltipRect.height - 10;
+                let leftPos = linkRect.left + (linkRect.width / 2) - (tooltipRect.width / 2);
+                let arrowPos = 50;
+
+                if (leftPos < 10) { 
+                    leftPos = 10;
+                    arrowPos = ((linkRect.left + linkRect.width / 2 - leftPos) / tooltipRect.width) * 100;
+                } else if (leftPos + tooltipRect.width > viewportWidth - 10) { 
+                    leftPos = viewportWidth - tooltipRect.width - 10;
+                    arrowPos = ((linkRect.left + linkRect.width / 2 - leftPos) / tooltipRect.width) * 100;
+                }
+
+                pcTooltip.style.top = `${topPos}px`;
+                pcTooltip.style.left = `${leftPos}px`;
+                pcTooltip.style.setProperty('--arrow-pos', `${arrowPos}%`);
+            }
+        });
+
+        // [PC] 마우스 아웃 시 툴팁 숨기기
+        link.addEventListener('mouseleave', function() {
+            if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+                pcTooltip.classList.remove('active');
+            }
+        });
+
+        // [본문 -> 하단] 각주 번호 클릭 시 이동
         link.addEventListener('click', function(e) {
-            // [PC 화면] 브라우저 폭이 768px 초과일 때: 하단 각주 영역으로 스크롤 이동
-            if (window.innerWidth > 768) {
-                e.preventDefault();
-                const targetId = this.getAttribute("href").substring(1);
-                const targetElement = document.getElementById(targetId);
-                if (targetElement) {
-                    window.scrollTo({ top: targetElement.offsetTop - 20, behavior: "smooth" });
+            e.preventDefault();
+            
+            // [PC] 아래쪽 각주 영역으로 이동 (배경색 반짝임 효과 제거 완료)
+            if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+                const fnId = this.getAttribute('data-id');
+                const targetFootnote = document.getElementById(`fn-${fnId}`);
+                if (targetFootnote) {
+                    targetFootnote.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
                 return; 
             }
 
-            // [모바일 화면] 브라우저 폭이 768px 이하일 때: 중앙에 모달 팝업 띄우기
-            e.preventDefault();
+            // [모바일] 터치 시 모달 팝업
             const fnId = this.getAttribute('data-id');
             const fnText = this.getAttribute('data-footnote');
-            
-            // 모달 안쪽 텍스트 업데이트 (주황색 번호 + 주석 내용)
             modalText.innerHTML = `<span class="fn-id">[${fnId}]</span> ${fnText}`;
-            modalOverlay.classList.add('active'); // 팝업 활성화
+            modalOverlay.classList.add('active'); 
+        });
+    });
+
+    // =========================================
+    // [하단 -> 본문] 아래쪽 각주 번호 클릭 시 위로 올라가기
+    // =========================================
+    const footnoteBacklinks = document.querySelectorAll('.footnote-backlink');
+    footnoteBacklinks.forEach(backlink => {
+        backlink.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            const targetId = this.getAttribute('href').substring(1);
+            const targetAnchor = document.getElementById(targetId);
+            
+            if (targetAnchor) {
+                // 1. 타겟이 접혀있는 인포박스(infobox-hidden-row) 안에 있다면 강제로 펼치기
+                const hiddenRow = targetAnchor.closest('.infobox-hidden-row');
+                if (hiddenRow && hiddenRow.style.display === 'none') {
+                    // 인포박스 내부의 숨겨진 줄을 모두 보이게 처리
+                    const infobox = targetAnchor.closest('.infobox');
+                    if (infobox) {
+                        const allHiddenRows = infobox.querySelectorAll('.infobox-hidden-row');
+                        allHiddenRows.forEach(row => { row.style.display = 'table-row'; });
+                        
+                        // '더보기' 버튼 텍스트가 있다면 '접기'로 변경 (클래스명에 맞춰 동작)
+                        const toggleBtn = infobox.querySelector('.infobox-toggle-btn');
+                        if (toggleBtn) toggleBtn.innerText = '접기';
+                    }
+                }
+
+                // 2. 만약 details 태그(접은 글) 안에 있다면 강제로 열기
+                const detailsParent = targetAnchor.closest('details');
+                if (detailsParent && !detailsParent.open) {
+                    detailsParent.open = true;
+                }
+
+                // 3. 브라우저가 화면을 펼치는 시간을 아주 잠깐(0.05초) 기다린 후 부드럽게 스크롤
+                setTimeout(() => {
+                    targetAnchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 50);
+            }
         });
     });
 
     // 모달 닫기 로직
-    const closeFootnoteModal = () => {
-        modalOverlay.classList.remove('active');
-    };
-    
-    // 닫기 버튼 클릭 시
+    const closeFootnoteModal = () => { modalOverlay.classList.remove('active'); };
     if (modalCloseBtn) modalCloseBtn.addEventListener('click', closeFootnoteModal);
-    
-    // 모달 배경(검은 반투명 영역) 터치 시
     if (modalOverlay) {
         modalOverlay.addEventListener('click', (e) => {
             if (e.target === modalOverlay) closeFootnoteModal();
         });
     }
-
 
     // =========================================
     // 6. 우측 하단 플로팅 내비게이션 동작 기능
